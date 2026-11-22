@@ -1,0 +1,49 @@
+[Unit]
+Description=Helios bridge for the Amazfit Helio Strap
+Documentation=file://@PLUGIN@/README.md
+# BlueZ and the session arrive with the graphical session; the bar is what reads us.
+After=graphical-session.target
+PartOf=graphical-session.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=exec
+ExecStart="@VENV@/bin/helios" daemon
+# The folders setup used, whatever this manager's own environment says.
+Environment="XDG_DATA_HOME=@DATA_HOME@" "XDG_CONFIG_HOME=@CONFIG_HOME@"
+Restart=on-failure
+RestartSec=15
+# 75: another daemon holds the lock; restarting won't help.
+RestartPreventExitStatus=75
+TimeoutStopSec=30
+Nice=5
+# Health history and the control socket are for this user only.
+UMask=0077
+RuntimeDirectory=helios
+RuntimeDirectoryMode=0700
+# Kept on stop, so a refused second start can't delete a running daemon's socket.
+RuntimeDirectoryPreserve=yes
+ProtectSystem=strict
+# Of the home folder the service sees only what it needs: its data folder
+# (the history database), and read-only its code (the plugin folder), its
+# environment and interpreter, and its config folder (the strap's key). The
+# rest of home is not there for it to read.
+ProtectHome=tmpfs
+BindPaths="@DATA@"
+BindReadOnlyPaths="@PLUGIN@" "@VENV@" -"@CONFIG@"@INTERPRETERS@
+# It talks to BlueZ over D-Bus and to the bar over its own socket: both are
+# Unix sockets. It has no use for the network.
+RestrictAddressFamilies=AF_UNIX
+NoNewPrivileges=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+# Above 96 MB the kernel reclaims from it; at 256 MB it is stopped (and, as a
+# failure, started again). It runs at about 25.
+MemoryHigh=96M
+MemoryMax=256M
+
+[Install]
+WantedBy=graphical-session.target

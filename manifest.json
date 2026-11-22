@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "id": "atlastimed.helios",
+  "name": "Helios",
+  "version": "0.7.2",
+  "author": "atlastimed",
+  "license": "MIT AND AGPL-3.0-or-later",
+  "description": "Amazfit Helio Strap in the Omarchy bar: live heart rate, sleep stages and naps, recovery against your usual night, workouts, HRV, stress, SpO2, skin temperature, PAI and battery.",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Helio Strap",
+    "description": "Live heart rate from your Amazfit Helio Strap, with a panel of sleep, recovery, workout and activity readings.",
+    "category": "Info",
+    "aliases": [
+      "heart",
+      "health",
+      "amazfit",
+      "helio",
+      "strap",
+      "fitness",
+      "sleep",
+      "workout"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "showHeartRate": true,
+      "pulse": false,
+      "hideWhenAway": false,
+      "temperatureUnit": "auto"
+    },
+    "schema": [
+      {
+        "key": "showHeartRate",
+        "type": "boolean",
+        "label": "Show heart rate next to the icon",
+        "defaultValue": true
+      },
+      {
+        "key": "pulse",
+        "type": "boolean",
+        "label": "Beat the heart icon in time with your pulse",
+        "description": "Redraws the bar on every beat while the strap streams.",
+        "defaultValue": false
+      },
+      {
+        "key": "hideWhenAway",
+        "type": "boolean",
+        "label": "Hide the icon while the strap is out of range",
+        "defaultValue": false
+      },
+      {
+        "key": "temperatureUnit",
+        "type": "enum",
+        "label": "Skin temperature unit",
+        "options": [
+          "auto",
+          "celsius",
+          "fahrenheit"
+        ],
+        "defaultValue": "auto",
+        "description": "Auto uses Fahrenheit only when both your locale and timezone are American."
+      }
+    ]
+  }
+}

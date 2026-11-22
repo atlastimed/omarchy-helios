@@ -1,0 +1,41 @@
+[project]
+name = "helios"
+version = "0.7.2"
+description = "Amazfit Helio Strap health data for the Omarchy shell."
+readme = "README.md"
+license = "AGPL-3.0-or-later"
+requires-python = ">=3.12"
+dependencies = [
+    "bleak>=1.1",
+]
+
+[dependency-groups]
+dev = [
+    # Only to check Helios's own AES and curve arithmetic against OpenSSL.
+    "cryptography>=44",
+    "pytest>=8",
+    "ruff>=0.8",
+]
+
+# Helios runs from its source folder (setup points the environment at src/),
+# so nothing is built and no build backend is fetched: the environment holds
+# exactly the locked, hashed packages in uv.lock.
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.13"
+extraPaths = ["src"]

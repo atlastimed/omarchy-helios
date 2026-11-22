@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Helios preview</title>
+<!--
+  The marketplace preview, composed from real captures of the widget showing
+  invented readings (demo_state.py). The graph along the horizon is a demo
+  day's heart rate (state.json), and the sun rises where it reaches 6 AM
+  (scene.py). README.md beside this file has the whole procedure.
+  Rendered at 1280x720, twice over:
+
+    python3 docs/preview/scene.py docs/preview/state.json > docs/preview/scene.svg
+    chromium --headless --hide-scrollbars --force-device-scale-factor=2 \
+      --window-size=1280,720 --screenshot=preview.png docs/preview/preview.html
+
+  The name is drawn in block letters, as Omarchy draws its own (scene.py).
+  Typefaces, both installed with Omarchy: Adwaita Sans for the text and
+  JetBrains Mono (the widget's own) on the graph.
+-->
+<style>
+  :root {
+    --night: #1a1b26;       /* the panel's own background */
+    --ink: #f1f3ff;
+    --ink-soft: #c6cceb;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; }
+  body {
+    position: relative;
+    /* Before dawn: night overhead, warming towards the horizon. */
+    background:
+      radial-gradient(900px 320px at 598px 462px, rgba(255, 150, 110, 0.36), transparent 72%),
+      linear-gradient(180deg, #0d0e18 0%, #14152a 26%, #231c43 46%, #46295a 58%, #74365f 64.2%);
+    color: var(--ink);
+  }
+  .scene { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; }
+
+  .say { position: absolute; left: 42px; top: 206px; width: 388px; font-family: "Adwaita Sans", "Inter", sans-serif; }
+  .say h1 { font-weight: 600; font-size: 25px; line-height: 1.24; letter-spacing: -0.3px; color: var(--ink); white-space: nowrap; }
+  .say p { margin-top: 14px; font-weight: 400; font-size: 15px; line-height: 1.55; color: var(--ink-soft); }
+
+  /* The real bar, and the real panel hanging from the heart in it. */
+  .bar { position: absolute; left: 0; top: 0; width: 1280px; height: 26px; }
+  .panel {
+    position: absolute; left: 836px; top: 32px; width: 438px; height: 682px;
+    box-shadow: 0 24px 80px rgba(4, 4, 10, 0.7), 0 0 0 1px rgba(122, 162, 247, 0.12);
+  }
+
+  /* Further down the panel: sections lifted out of the same capture. */
+  .excerpt {
+    position: absolute; width: 352px; background: var(--night);
+    border: 1px solid rgba(122, 162, 247, 0.42);
+    box-shadow: 0 18px 50px rgba(4, 4, 10, 0.65);
+  }
+  .excerpt img { display: block; width: 100%; }
+  .workouts { left: 40px; top: 536px; }
+  .trends { left: 408px; top: 498px; }
+</style>
+</head>
+<body>
+  <img class="scene" src="scene.svg" alt="">
+
+  <div class="say">
+    <h1>Your Helio Strap in the Omarchy bar.</h1>
+    <p>Live heart rate, last night's sleep beside your usual, workouts and a month of trends. Read over Bluetooth and kept on your computer.</p>
+  </div>
+
+  <div class="excerpt workouts"><img src="workouts.png" alt=""></div>
+  <div class="excerpt trends"><img src="trends.png" alt=""></div>
+
+  <img class="bar" src="bar.png" alt="">
+  <img class="panel" src="panel.png" alt="">
+</body>
+</html>

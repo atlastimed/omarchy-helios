@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# Set up Helios's Bluetooth service, which the bar widget reads from.
+#
+#   setup              build the Python environment, install and start the
+#                      service, and fetch the strap's key if there is none
+#   setup --auth       fetch the strap's key again (after re-pairing in Zepp);
+#                      add the strap's address (AA:BB:CC:DD:EE:FF) if your
+#                      Zepp account has several devices
+#   setup --uninstall  stop and remove the service and its Python environment
+#   --yes              skip the confirmation
+#
+# Safe to rerun. Nothing is written inside this plugin folder: the environment
+# lives in ~/.local/share/helios and runs the code here in place, so after
+# `omarchy plugin update` a rerun (or restarting the service) picks it up.
+
+set -euo pipefail
+
+step() { printf '\n==> %s\n' "$*"; }
+die() { printf 'setup: %s\n' "$*" >&2; exit 1; }
+
+# An XDG folder: the variable if it holds an absolute path (the spec says to
+# ignore any other value), else the default.
+xdg() { local value="${!1:-}"; if [[ "$value" == /* ]]; then printf '%s' "$value"; else printf '%s' "$2"; fi; }
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+data_home=$(xdg XDG_DATA_HOME "$HOME/.local/share")
+config_home=$(xdg XDG_CONFIG_HOME "$HOME/.config")
+data_dir="$data_home/helios"
+config_dir="$config_home/helios"
+venv="$data_dir/venv"
+# The unit goes where the service manager looks, which is its own idea of the
+# config folder, not necessarily this shell's.
+manager_config=$(systemctl --user show-environment 2>/dev/null | sed -n 's/^XDG_CONFIG_HOME=//p' | head -n1)
+[[ "$manager_config" == /* ]] || manager_config="$HOME/.config"
+unit="$manager_config/systemd/user/helios.service"
+
+mode=install
+assume_yes=0
+address=
+for arg in "$@"; do
+  case "$arg" in
+    --auth) mode=auth ;;
+    --uninstall) mode=uninstall ;;
+    --yes | -y) assume_yes=1 ;;
+    -h | --help) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    [0-9A-Fa-f][0-9A-Fa-f]:*) address=$arg ;;
+    *) echo "setup: unknown option $arg" >&2; exit 2 ;;
+  esac
+done
+
+# A unit file can't carry a path holding a quote, a backslash or a line break,
+# and systemd would refuse the unit with a message about something else.
+for path in "$here" "$data_dir" "$config_dir"; do
+  case "$path" in
+    *[\"\'\\]* | *$'\n'*) die "Helios can't run from under $path: remove the quote, backslash or line break from that path." ;;
+  esac
+done
+
+confirm() {
+  ((assume_yes)) && return 0
+  local reply
+  # No answer to be had (no terminal, or input ended) is a no.
+  read -rp "$1 [Y/n] " reply || return 1
+  [[ -z "$reply" || "$reply" =~ ^[Yy] ]]
+}
+
+# One word for a shell, whatever the path holds.
+quoted() { printf "'%s'" "${1//\'/\'\\\'\'}"; }
+
+# The environment holds only what uv.lock names (bleak and its D-Bus library),
+# each a prebuilt wheel checked against its hash (--no-build: nothing is
+# compiled or built here). Helios itself is not installed into it: a .pth
+# file adds this folder's src/ to the interpreter's path, and a launcher
+# starts it with -I, so nothing in the environment variables or the current
+# folder can change what gets imported. -B: Helios's own bytecode is never
+# written anywhere. A cache the sandboxed service could write would be one
+# its unsandboxed commands (the sign-in among them) then ran code from.
+build_environment() {
+  command -v uv >/dev/null || die "Helios needs uv, which Omarchy provides. If yours has none: omarchy pkg add uv"
+  mkdir -p "$data_dir" "$config_dir"
+  chmod 700 "$data_dir" "$config_dir"
+  UV_PROJECT_ENVIRONMENT="$venv" uv sync --project "$here" --locked --no-dev --no-build --compile-bytecode --quiet
+  local site
+  site=$("$venv/bin/python" -I -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
+  printf '%s\n' "$here/src" >"$site/helios.pth"
+  printf '#!/bin/sh\nexec %s -I -B -m helios "$@"\n' "$(quoted "$venv/bin/python")" >"$venv/bin/helios"
+  chmod 755 "$venv/bin/helios"
+  rm -rf "${data_dir:?}/pycache"  # where 0.7.0 and 0.7.1 kept bytecode
+  "$venv/bin/helios" --version >/dev/null || die "the environment was built but Helios does not start from it"
+}
+
+fetch_key() {
+  step "Fetching the strap's key from your Zepp account"
+  echo "Your email and password go to Zepp's servers and nowhere else."
+  "$venv/bin/helios" auth ${address:+"$address"}
+}
+
+if [[ $mode == uninstall ]]; then
+  confirm "Stop the Helios service and remove it and its Python environment?" || exit 0
+  systemctl --user disable --now helios.service 2>/dev/null || true
+  rm -f "$unit"
+  systemctl --user daemon-reload
+  rm -rf "${venv:?}" "${data_dir:?}/pycache"
+  echo "Removed the Helios service."
+  echo "Your history ($data_dir) and key ($config_dir) are kept; delete those folders for a clean slate."
+  echo "Remove the widget with: omarchy plugin remove atlastimed.helios"
+  exit 0
+fi
+
+if [[ $mode == auth ]]; then
+  [[ -x "$venv/bin/helios" ]] || build_environment
+  fetch_key
+  systemctl --user restart helios.service 2>/dev/null || true
+  exit 0
+fi
+
+command -v systemctl >/dev/null || die "Helios needs systemd."
+
+cat <<EOF
+Helios will:
+  1. Build a Python environment in $venv
+     (downloads bleak and its D-Bus library, and Python 3.13 if you don't have it)
+  2. Install helios.service as a systemd user service and start it now and at login
+EOF
+[[ -f "$config_dir/auth.toml" ]] || echo "  3. Fetch your strap's key from your Zepp account (asks for your Zepp login)"
+echo
+confirm "Continue?" || exit 0
+
+step "Building the Python environment"
+build_environment
+
+# bluetoothctl waits without end for a Bluetooth service that isn't running.
+if ! timeout 5 bluetoothctl show 2>/dev/null | grep -q "Powered: yes"; then
+  echo "Bluetooth is off. Turn it on (the bar's Bluetooth panel) so Helios can reach the strap."
+fi
+
+[[ -f "$config_dir/auth.toml" ]] || fetch_key
+
+step "Installing helios.service"
+mkdir -p "$(dirname "$unit")"
+# Escape for systemd (a % starts a specifier), then for sed's replacement
+# side: backslash, the | delimiter and &.
+for_unit() { printf '%s' "${1//%/%%}" | sed -e 's/[\\|&]/\\&/g'; }
+# The interpreter the environment runs on, which the service must still see
+# from inside its sandbox. uv keeps its own under the home folder and links
+# to it by way of a second link (cpython-3.13 -> cpython-3.13.16), so the
+# folder holding both is what gets shown; one outside home needs nothing.
+interpreters=
+link=$(readlink "$venv/bin/python" || true)
+[[ "$link" == /* ]] || link="$venv/bin/$link"
+for target in "$link" "$(readlink -f "$venv/bin/python")"; do
+  folder=$(dirname "$(dirname "$(dirname "$target")")")
+  case "$folder" in
+    *[\"\'\\]* | *$'\n'*) die "Python is installed under $folder, a path the service's unit file can't carry." ;;
+    "$HOME"/*) [[ "$interpreters" == *"\"$folder\""* ]] || interpreters+=" -\"$folder\"" ;;
+  esac
+done
+sed -e "s|@VENV@|$(for_unit "$venv")|g" -e "s|@DATA@|$(for_unit "$data_dir")|g" \
+  -e "s|@CONFIG@|$(for_unit "$config_dir")|g" -e "s|@PLUGIN@|$(for_unit "$here")|g" \
+  -e "s|@INTERPRETERS@|$(for_unit "$interpreters")|g" -e "s|@DATA_HOME@|$(for_unit "$data_home")|g" \
+  -e "s|@CONFIG_HOME@|$(for_unit "$config_home")|g" "$here/systemd/helios.service" >"$unit"
+systemctl --user daemon-reload
+systemctl --user enable --quiet helios.service
+systemctl --user restart helios.service
+
+sleep 2
+if systemctl --user is-active --quiet helios.service; then
+  echo
+  echo "Helios is running. Click the heart in your bar to see your readings."
+else
+  echo
+  echo "The service didn't stay up. See: journalctl --user -u helios -n 50"
+  exit 1
+fi
